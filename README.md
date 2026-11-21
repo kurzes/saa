@@ -16,6 +16,13 @@ Yksi HTML-tiedosto (`public/index.html`), ei käännösvaihetta. Valinnainen vä
 - **Tuotanto:** lataa `index.html` mihin tahansa staattiseen hostaukseen (Cloudflare Pages, Netlify, GitHub Pages) ja ota `proxy/worker.js` käyttöön (ohje tiedoston alussa). Liitä workerin osoite: Asetukset → Datayhteys.
 - Jos sääpalveluihin ei saada yhteyttä (esim. esikatseluikkunassa), sovellus siirtyy automaattisesti **esikatselutilaan** simuloidulla datalla ja näyttää siitä ilmoituksen.
 
+## Asennettava sovellus (PWA)
+
+- `public/manifest.webmanifest`, kuvakkeet `public/icons/` ja service worker `public/sw.js`.
+- Android/Chrome/Edge: yläpalkkiin ilmestyy Asenna-painike (myös Asetukset → Asenna sovellus). iPhone: Safari → Jaa → Lisää Koti-valikkoon.
+- Offline: sovelluksen runko ja viimeisin ennuste ovat käytettävissä ilman verkkoa (otsikossa merkintä "ei yhteyttä"). Lähiennustetta ja tutkakuvia ei näytetä vanhoina.
+- Service workerin välimuistin versio on `VERSION`-vakiossa; sivu itse haetaan aina ensin verkosta, joten julkaisut näkyvät heti ilman versionnostoa.
+
 ## Datalähteet
 
 | Tieto | Lähde | Huomiot |
