@@ -1,0 +1,17 @@
+# Julkaisee sovelluksen tuotantoon aina, kun main-haaraan tulee muutos.
+name: Julkaisu tuotantoon
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: saaennuste-4166b

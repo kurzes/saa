@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="fi" data-skin="lasi" data-anim="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Sää</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700&family=Inter+Tight:wght@300;400;600&family=Space+Grotesk:wght@300;400;600&family=Sora:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* VOICE: rauhallinen, ilmava, pohjoismainen — sää puhuu, käyttöliittymä vaikenee
+   IDEA: ikkuna taivaalle; koko ruutu on säätila ja kortit ovat huurteista lasia sen edessä
+   PICTURE: elävä taivas (canvas) joka puoliskolla itsenäisesti, animoidut SVG-ikonit
+   COLOUR and TYPE: taivaan väri johdetaan säästä ja auringon korkeudesta; neljä teemaa, kullakin oma kirjasin
+   LAYOUT: yksi tai kaksi itsenäistä paneelia, rinnakkain tai allekkain; sisältö max 760px */
+:root{
+  --font:'Manrope',system-ui,sans-serif;
+  --ink:#fff;--ink2:rgba(255,255,255,.74);
+  --card:rgba(10,20,36,.30);--card-b:rgba(255,255,255,.18);--stat:rgba(255,255,255,.08);
+  --blur:18px;--shadow:0 10px 36px rgba(0,10,30,.18);--radius:22px;
+  --accent:#ffd36b;--tshadow:0 1px 3px rgba(0,10,30,.28);
+  --sheet:#121a27;--sheet-ink:#f2f5f9;--sheet-2:rgba(255,255,255,.07);
+  --ic-sun:#ffc845;--ic-moon:#f3ecd2;--ic-cloud:#f6f8fb;--ic-cloud2:#c9d1db;--ic-cloud3:#a5afbd;--ic-drop:#6cc0ff;--ic-flake:#ffffff;
+  --sel:rgba(255,255,255,.24);
+}
+html[data-skin=paperi]{
+  --font:'Inter Tight',system-ui,sans-serif;
+  --ink:#1b222a;--ink2:rgba(27,34,42,.66);
+  --card:rgba(255,255,255,.80);--card-b:rgba(20,30,40,.09);--stat:rgba(20,30,40,.045);
+  --blur:12px;--shadow:0 4px 18px rgba(30,40,50,.07);--radius:14px;
+  --accent:#d4572a;--tshadow:none;
+  --sheet:#fbfaf7;--sheet-ink:#1b222a;--sheet-2:rgba(20,30,40,.05);
+  --ic-sun:#f2a516;--ic-moon:#b7a874;--ic-cloud:#c3cdd8;--ic-cloud2:#a6b2bf;--ic-cloud3:#7f8b99;--ic-drop:#2f8ae0;--ic-flake:#86a9cf;
+  --sel:rgba(20,30,40,.10);
+}
+html[data-skin=yo]{
+  --font:'Space Grotesk',system-ui,sans-serif;
+  --ink:#e8edf4;--ink2:rgba(232,237,244,.62);
+  --card:rgba(0,0,0,.62);--card-b:rgba(255,255,255,.10);--stat:rgba(255,255,255,.05);
+  --blur:8px;--shadow:none;--radius:16px;--accent:#8ab4ff;
+  --sheet:#07090c;--sheet-ink:#e8edf4;
+}
+html[data-skin=revontuli]{
+  --font:'Sora',system-ui,sans-serif;
+  --ink:#f0fff8;--ink2:rgba(240,255,248,.72);
+  --card:rgba(4,30,38,.40);--card-b:rgba(120,255,200,.22);--stat:rgba(120,255,200,.07);
+  --radius:26px;--accent:#5dffb0;--sheet:#062026;--sel:rgba(93,255,176,.22);
+}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%}
+body{background:#0b1020;color:var(--ink);font:16px/1.5 var(--font);overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* yläpalkki */
+.top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(14px,env(safe-area-inset-left));pointer-events:none}
+.top>*{pointer-events:auto}
+.brand{font-weight:700;font-size:20px;letter-spacing:-.02em;text-shadow:var(--tshadow);display:flex;align-items:center;gap:8px}
+.brand svg{width:22px;height:22px}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.seg{display:flex;background:var(--card);border:1px solid var(--card-b);border-radius:999px;padding:3px;backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur))}
+.seg button{min-width:44px;height:38px;padding:0 14px;border:0;background:none;border-radius:999px;font-size:15px;font-weight:600}
+.seg button[aria-pressed=true]{background:var(--sel)}
+.tbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--card-b);background:var(--card);backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur))}
+.tbtn svg{width:20px;height:20px}
+.tbtn.sm{width:40px;height:40px}
+[hidden]{display:none!important}
+
+/* paneelit */
+.panes{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.panes[data-layout=split][data-orient=cols]{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.panes[data-layout=split][data-orient=rows]{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+.pane{position:relative;overflow:hidden;container-type:inline-size;background:linear-gradient(180deg,var(--sky1,#1c3b6a),var(--sky2,#6d9cc9));text-shadow:var(--tshadow)}
+.panes[data-orient=cols] .pane+.pane{border-left:1px solid rgba(255,255,255,.16)}
+.panes[data-orient=rows] .pane+.pane{border-top:1px solid rgba(255,255,255,.16)}
+.sky{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.scrollp{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:68px clamp(12px,4cqi,32px) 28px;scrollbar-width:thin}
+.panes[data-orient=rows] .pane+.pane .scrollp{padding-top:16px}
+.inner{max-width:760px;margin:0 auto;display:grid;gap:14px}
+.glass{background:var(--card);border:1px solid var(--card-b);border-radius:var(--radius);backdrop-filter:blur(var(--blur)) saturate(140%);-webkit-backdrop-filter:blur(var(--blur)) saturate(140%);box-shadow:var(--shadow);padding:16px 18px}
+h3{font-size:14px;font-weight:600;color:var(--ink2);margin:0 0 10px;letter-spacing:.01em}
+
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.loc-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:4px 0;font-size:clamp(24px,7cqi,38px);font-weight:600;letter-spacing:-.02em;line-height:1.1;text-align:left;min-height:44px}
+.loc-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.loc-btn svg{flex:none;width:20px;height:20px;opacity:.7}
+.sub{color:var(--ink2);font-size:15px;margin-top:-4px}
+.favs{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
+.favs::-webkit-scrollbar{display:none}
+.chip{flex:none;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--card-b);background:var(--card);backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));font-size:14px;font-weight:600;white-space:nowrap}
+.chip[aria-pressed=true]{background:var(--sel);border-color:transparent}
+
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:6px 18px}
+.hero .ic{width:clamp(92px,26cqi,140px);height:auto;filter:drop-shadow(0 6px 14px rgba(0,0,0,.18))}
+.bigt{font-size:clamp(60px,17cqi,108px);font-weight:300;line-height:.95;letter-spacing:-.05em;white-space:nowrap}
+.cond{font-size:clamp(17px,4.4cqi,21px);font-weight:600;margin-top:6px}
+.feels{font-size:16px;color:var(--ink2)}
+.feels b{color:var(--ink);font-weight:600}
+.stats{grid-column:1/-1;justify-self:stretch;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(132px,100%),1fr));gap:8px;margin-top:10px}
+.stat{background:var(--stat);border-radius:14px;padding:9px 12px}
+.stat small{display:block;color:var(--ink2);font-size:13px}
+.stat b{font-size:17px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.stat em{font-style:normal;font-weight:400;color:var(--ink2);font-size:14px}
+.arrow{width:16px;height:16px;flex:none}
+.metrics{grid-column:1/-1;justify-self:stretch;display:flex;flex-wrap:wrap;gap:10px 24px;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-b)}
+.mi{display:flex;align-items:center;gap:7px;font-size:17px;white-space:nowrap}
+.mi b{font-weight:600}.mi em{font-style:normal;color:var(--ink2);font-size:15px}
+.mic svg{width:24px;height:24px;display:block}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.dgw{grid-column:1/-1;justify-self:stretch;margin-top:16px}
+.dgh{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;font-size:14px;color:var(--ink2);margin-bottom:2px}
+.dgh b{color:var(--ink);font-weight:600}
+.dg{position:relative;height:156px}
+.dg svg{position:absolute;inset:0;overflow:visible}
+.dg text{font:600 13px var(--font);fill:var(--ink)}
+.dg text.ax{fill:var(--ink2);font-weight:500}
+.dg text.ws{font-weight:600}
+
+.nct{margin:0 0 12px;font-size:17px;line-height:1.45;text-wrap:pretty}
+.ncb{display:flex;align-items:flex-end;gap:2px;height:46px}
+.ncb i{flex:1;border-radius:3px 3px 1px 1px;background:var(--ic-drop);opacity:.18;min-height:3px}
+.ncb i.w{opacity:1}
+.ncax{display:flex;justify-content:space-between;color:var(--ink2);font-size:13px;margin-top:4px}
+
+.phen{display:grid;gap:10px}
+.pc{display:grid;grid-template-columns:42px minmax(0,1fr);gap:12px;align-items:start}
+.pc .pi{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--stat)}
+.pc .pi svg{width:26px;height:26px}
+.pc b{display:block;font-size:16px}
+.pc p{margin:2px 0 0;color:var(--ink2);font-size:15px;text-wrap:pretty}
+.pc.l2 .pi{background:rgba(255,120,90,.25)}
+.pc.aur .pi{background:rgba(93,255,176,.2)}
+.pline{font-size:15px;color:var(--ink2);padding:12px 16px}
+
+.hscroll{overflow-x:auto;margin:0 -8px;padding:0 8px 4px;scrollbar-width:thin}
+.hrow{position:relative;display:flex;width:max-content}
+.hcol{width:58px;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px}
+.ht{height:18px;line-height:18px;color:var(--ink2);font-weight:600}
+.hcol .ic{width:32px;height:32px}
+.hsp{height:64px}
+.hcurve{position:absolute;left:0;top:58px;overflow:visible;pointer-events:none}
+.hcurve text{font:600 14px var(--font);fill:var(--ink)}
+.hp{width:10px;height:24px;display:flex;align-items:flex-end;background:var(--stat);border-radius:4px;overflow:hidden}
+.hp i{display:block;width:100%;background:var(--ic-drop)}
+.hpl{height:18px;color:var(--ink2);white-space:nowrap}
+.hday{position:absolute;top:0;height:100%;border-left:1px dashed var(--card-b)}
+
+.day{display:grid;grid-template-columns:4.6em 38px minmax(3.6em,1fr) 2.6em minmax(54px,2.2fr) 2.6em;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--card-b)}
+.day:first-of-type{border-top:0}
+.dn b{display:block;font-size:16px}
+.dn small,.dp small{display:block;color:var(--ink2);font-size:13px}
+.dp{font-size:14px;white-space:nowrap}
+.day .ic{width:38px;height:38px}
+.tmin{color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums}
+.tmax{font-weight:600;font-variant-numeric:tabular-nums}
+.rb{height:6px;border-radius:3px;background:var(--stat);position:relative}
+.rb i{position:absolute;top:0;bottom:0;border-radius:3px}
+@container (max-width:420px){
+  .day{grid-template-columns:3.6em 32px minmax(0,1fr) 2.4em minmax(30px,1.4fr) 2.4em;gap:7px}
+  .dp small{display:none}
+  .hero{grid-template-columns:minmax(0,1fr);justify-items:start}
+  .hero .ic{grid-row:1;width:84px}
+}
+
+.map{height:250px;border-radius:14px;overflow:hidden;position:relative;background:#0d1520;z-index:0}
+.map canvas{position:absolute;inset:0;width:100%;height:100%}
+.rbar{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:14px;color:var(--ink2);flex-wrap:wrap}
+.rbar .tbtn{flex:none}
+.rbar .rt{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;min-width:7.5em}
+.rbar a{color:inherit}
+.leaflet-container{font:13px var(--font);background:#0d1520}
+.leaflet-control-attribution{font-size:11px!important}
+.src{font-size:13px;color:var(--ink2);text-align:center;padding:6px 0 4px}
+.src a{color:inherit}
+.err{padding:18px}
+.err button{margin-top:10px}
+.loading{opacity:.75;font-size:16px;padding:22px 18px}
+
+/* ikonien liike */
+.ic .rays{transform-box:fill-box;transform-origin:center;animation:spin 40s linear infinite}
+.ic .cl{animation:drift 7s ease-in-out infinite alternate}
+.ic .drop{animation:fall 1.15s linear infinite}
+.ic .flake{animation:flk 2.8s linear infinite}
+.ic .bolt{animation:flash 3.4s ease-in-out infinite}
+.ic .fogl line{animation:drift 5s ease-in-out infinite alternate}
+.ic .fogl line:nth-child(2){animation-delay:-2.5s}
+.ic .moon{animation:bob 7s ease-in-out infinite alternate}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{from{transform:translateX(-1.5px)}to{transform:translateX(2px)}}
+@keyframes bob{from{transform:translateY(-1px)}to{transform:translateY(1.5px)}}
+@keyframes fall{0%{transform:translateY(-5px);opacity:0}25%{opacity:1}100%{transform:translateY(8px);opacity:0}}
+@keyframes flk{0%{transform:translate(0,-5px);opacity:0}25%{opacity:1}100%{transform:translate(2px,8px);opacity:0}}
+@keyframes flash{0%,62%,72%,100%{opacity:.25}66%,70%{opacity:1}}
+html[data-anim=off] .ic *{animation:none!important}
+@media (prefers-reduced-motion:reduce){.ic *{animation:none!important}}
+
+/* dialogit */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(4,8,16,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;padding:6vh 12px 12px;text-shadow:none}
+.sheet{width:min(480px,100%);max-height:88vh;overflow:auto;background:var(--sheet);color:var(--sheet-ink);border-radius:22px;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
+.sheet h2{font-size:22px;margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sheet h4{font-size:14px;margin:18px 0 8px;opacity:.7;font-weight:600}
+.sheet p.note{font-size:14px;opacity:.72;margin:6px 0 0}
+.x{width:44px;height:44px;border-radius:50%;border:0;background:var(--sheet-2);font-size:20px;line-height:1}
+.inp{width:100%;height:48px;border-radius:12px;border:1px solid rgba(128,140,160,.35);background:var(--sheet-2);color:inherit;font:16px var(--font);padding:0 14px}
+.list{display:grid;gap:4px;margin-top:10px}
+.row{display:flex;align-items:center;gap:8px;border-radius:12px;background:var(--sheet-2)}
+.row>button:first-child{flex:1;text-align:left;border:0;background:none;padding:10px 14px;min-height:48px}
+.row small{display:block;opacity:.65;font-size:13px}
+.star{width:44px;height:44px;border:0;background:none;font-size:20px;flex:none}
+.star[aria-pressed=true]{color:#f5b301}
+.wide{width:100%;min-height:46px;border-radius:12px;border:1px solid rgba(128,140,160,.35);background:var(--sheet-2);font-weight:600;margin-top:10px}
+.skins{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.skin{border:2px solid transparent;border-radius:14px;padding:0;overflow:hidden;text-align:left;background:var(--sheet-2)}
+.skin[aria-pressed=true]{border-color:var(--accent)}
+.skin i{display:block;height:58px}
+.skin span{display:block;padding:8px 10px 2px;font-weight:600}
+.skin small{display:block;padding:0 10px 10px;font-size:13px;opacity:.7}
+.sheet .seg{background:var(--sheet-2);border-color:transparent;backdrop-filter:none}
+.sheet .seg button[aria-pressed=true]{background:var(--accent);color:#111}
+.sel{height:46px;border-radius:12px;width:100%;font:16px var(--font);padding:0 12px;background:var(--sheet-2);color:inherit;border:1px solid rgba(128,140,160,.35)}
+.sel option{color:#111}
+.msg{font-size:14px;opacity:.75;margin-top:8px}
+
+#banner{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:30;width:min(640px,calc(100% - 24px));display:flex;gap:12px;align-items:center;padding:12px 12px 12px 16px;font-size:14px;line-height:1.4;text-shadow:none}
+#banner p{margin:0;flex:1}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="4" fill="#ffc845"/><path d="M8 19h9a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.4A3.4 3.4 0 0 0 8 19z" fill="#f6f8fb"/></svg>Sää</div>
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Näkymä">
+      <button data-layout="single" aria-pressed="true">Yksi</button>
+      <button data-layout="split" aria-pressed="false">Kaksi</button>
+    </div>
+    <div class="seg" id="orientSeg" role="group" aria-label="Jaon suunta" hidden>
+      <button data-orient="cols" aria-label="Rinnakkain" title="Rinnakkain"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="16" height="14" rx="2.5"/><path d="M10 3v14"/></svg></button>
+      <button data-orient="rows" aria-label="Allekkain" title="Allekkain"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="16" height="14" rx="2.5"/><path d="M2 10h16"/></svg></button>
+    </div>
+    <button class="tbtn" id="setBtn" aria-label="Asetukset ja teemat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
+  </div>
+</header>
+<main id="panes" class="panes" data-layout="single" data-orient="cols"></main>
+<div id="banner" class="glass" hidden><p></p><button class="x" data-close-banner aria-label="Sulje ilmoitus">×</button></div>
+<div id="modal" class="modal" hidden><div class="sheet" role="dialog" aria-modal="true"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+{
+/* ---------- perusapuvälineet ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const store={get(k,d){try{const v=localStorage.getItem('saa:'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem('saa:'+k,JSON.stringify(v))}catch(e){}}};
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HKI={name:'Helsinki',region:'Uusimaa, Suomi',lat:60.1699,lon:24.9384,tz:'Europe/Helsinki'};
+const KILP={name:'Kilpisjärvi',region:'Lappi, Suomi',lat:69.0478,lon:20.7911,tz:'Europe/Helsinki'};
+const S=Object.assign({skin:'lasi',anim:RM?'off':'full',layout:'single',orient:'cols',proxy:'',preview:'auto',favs:[HKI,KILP,{name:'Tampere',region:'Pirkanmaa, Suomi',lat:61.4978,lon:23.761,tz:'Europe/Helsinki'}],locs:[HKI,KILP]},store.get('settings',{}));
+const save=()=>store.set('settings',S);
+let DEMO=false;
+const deg=t=>{const v=Math.round(t)||0;return (v<0?'−'+(-v):v)+'°'};
+const f1=x=>(+x).toLocaleString('fi-FI',{maximumFractionDigits:1});
+const sameLoc=(a,b)=>a&&b&&Math.abs(a.lat-b.lat)<.01&&Math.abs(a.lon-b.lon)<.01;
+
+/* ---------- aika ja aurinko ---------- */
+const FC={};
+function fmtr(tz,opt){const k=tz+JSON.stringify(opt);if(!FC[k]){try{FC[k]=new Intl.DateTimeFormat('fi-FI',{...opt,timeZone:tz})}catch(e){FC[k]=new Intl.DateTimeFormat('fi-FI',opt)}}return FC[k]}
+const fmt=(d,tz,opt)=>fmtr(tz,opt).format(d);
+const hm=(d,tz)=>fmt(d,tz,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+function lp(d,tz){const o={};for(const p of fmtr(tz,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d))o[p.type]=p.value;return o}
+const dayKey=(d,tz)=>{const p=lp(d,tz);return p.year+p.month+p.day};
+const lHour=(d,tz)=>{const p=lp(d,tz);return (+p.hour%24)+(+p.minute)/60};
+const lMonth=(d,tz)=>+lp(d,tz).month;
+function sunAlt(date,lat,lon){
+  const R=Math.PI/180,d=+date/864e5-10957.5;
+  const g=(357.529+.98560028*d)*R,q=280.459+.98564736*d;
+  const L=(q+1.915*Math.sin(g)+.02*Math.sin(2*g))*R,e=(23.439-36e-8*d)*R;
+  const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L)),dec=Math.asin(Math.sin(e)*Math.sin(L));
+  const gmst=((18.697374558+24.06570982441908*d)%24+24)%24,H=(gmst*15+lon)*R-ra;
+  return Math.asin(Math.sin(lat*R)*Math.sin(dec)+Math.cos(lat*R)*Math.cos(dec)*Math.cos(H))/R;
+}
+function sunTimes(loc){
+  const now=new Date(),start=+now-lHour(now,loc.tz)*36e5;let rise=null,set=null,prev=sunAlt(new Date(start),loc.lat,loc.lon),mx=prev;
+  for(let m=10;m<=1440;m+=10){const t=start+m*6e4,a=sunAlt(new Date(t),loc.lat,loc.lon);mx=Math.max(mx,a);
+    const h=-.833;if(prev<h&&a>=h&&!rise)rise=new Date(t-6e5*(a-h)/(a-prev));if(prev>=h&&a<h&&!set)set=new Date(t-6e5*(h-a)/(prev-a));prev=a}
+  return {rise,set,polar:!rise&&!set?(mx<-.833?'night':'day'):null};
+}
+
+/* ---------- symbolit ja ikonit ---------- */
+function parseSym(code){
+  code=code||'cloudy';const night=/_(night|polartwilight)$/.test(code),base=code.replace(/_(day|night|polartwilight)$/,'');
+  const showers=/showers/.test(base),type=/snow/.test(base)?'snow':/sleet/.test(base)?'sleet':/rain/.test(base)?'rain':null;
+  return {night,base,showers,type,thunder:/thunder/.test(base),fog:base==='fog',inten:type?(/heavy/.test(base)?3:/light/.test(base)?1:2):0,
+    sky:base.startsWith('clearsky')?0:base.startsWith('fair')?1:base.startsWith('partlycloudy')||showers?2:3};
+}
+function descSym(code){
+  const s=parseSym(code);if(s.fog)return 'Sumua';
+  if(!s.type)return ['Selkeää','Enimmäkseen selkeää','Puolipilvistä','Pilvistä'][s.sky];
+  let t=s.showers?['','heikkoja ','','voimakkaita '][s.inten]+{rain:'sadekuuroja',sleet:'räntäkuuroja',snow:'lumikuuroja'}[s.type]
+                 :['','heikkoa ','','voimakasta '][s.inten]+{rain:'sadetta',sleet:'räntää',snow:'lumisadetta'}[s.type];
+  return cap(t)+(s.thunder?' ja ukkosta':'');
+}
+const CLOUD='M17 48h29a10 10 0 0 0 1.5-19.9A14 14 0 0 0 20.6 25 10 10 0 0 0 17 48z';
+let icN=0;
+function icon(code,size=64){
+  const s=parseSym(code),id='mk'+(++icN),precip=!!s.type,showSun=!s.fog&&s.sky<=2;
+  let g='';
+  if(s.fog){
+    g+=`<circle cx="32" cy="22" r="9" fill="var(--ic-sun)" opacity=".55"/><g class="fogl" stroke="var(--ic-cloud)" stroke-width="3.4" stroke-linecap="round"><line x1="12" y1="30" x2="50" y2="30"/><line x1="16" y1="39" x2="54" y2="39"/><line x1="10" y1="48" x2="46" y2="48"/></g>`;
+  }else{
+    if(showSun){
+      const big=s.sky===0,cx=big?32:23,cy=big?32:(precip?17:22),r=big?12:8.5;
+      if(!s.night){let rays='';for(let i=0;i<8;i++){const a=i*Math.PI/4,r1=r+4,r2=r+(big?9:6.5);rays+=`<line x1="${(cx+Math.cos(a)*r1).toFixed(1)}" y1="${(cy+Math.sin(a)*r1).toFixed(1)}" x2="${(cx+Math.cos(a)*r2).toFixed(1)}" y2="${(cy+Math.sin(a)*r2).toFixed(1)}"/>`}
+        g+=`<g class="rays" stroke="var(--ic-sun)" stroke-width="2.6" stroke-linecap="round">${rays}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--ic-sun)"/>`;}
+      else g+=`<mask id="${id}"><rect width="64" height="64" fill="#fff"/><circle cx="${cx+r*.6}" cy="${cy-r*.45}" r="${r*.86}" fill="#000"/></mask><g class="moon"><circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--ic-moon)" mask="url(#${id})"/></g>`;
+    }
+    if(s.sky>=1||precip){
+      const dark=s.inten>=2||s.thunder,small=s.sky===1&&!precip;
+      const ty=precip?-6:(small?8:2),tx=small?12:(showSun?4:0),sc=small?.72:1;
+      if(s.sky>=3&&dark)g+=`<g class="cl" style="animation-delay:-3s"><path d="${CLOUD}" fill="var(--ic-cloud3)" transform="translate(${tx-9} ${ty-7}) scale(.82)"/></g>`;
+      g+=`<g class="cl"><path d="${CLOUD}" fill="${dark?'var(--ic-cloud2)':'var(--ic-cloud)'}" transform="translate(${tx} ${ty}) scale(${sc})"/></g>`;
+    }
+    if(precip){
+      const xs=s.thunder?[18,46]:[[],[24,38],[20,31,42],[17,26,35,44]][s.inten];
+      xs.forEach((x,i)=>{const snow=s.type==='snow'||(s.type==='sleet'&&i%2);const dl=`style="animation-delay:${(-i*.37).toFixed(2)}s"`;
+        g+=snow?`<circle class="flake" ${dl} cx="${x}" cy="50" r="2.3" fill="var(--ic-flake)"/>`
+               :`<line class="drop" ${dl} x1="${x}" y1="47" x2="${x-2.4}" y2="54" stroke="var(--ic-drop)" stroke-width="2.6" stroke-linecap="round"/>`});
+    }
+    if(s.thunder)g+=`<path class="bolt" d="M34 40l-7 11h6l-3 9 11-13h-6l3-7z" fill="var(--ic-sun)"/>`;
+  }
+  return `<svg class="ic" viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true">${g}</svg>`;
+}
+const PI={
+  wind:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/></svg>',
+  thunder:'<svg viewBox="0 0 24 24"><path d="M13 2 5 14h6l-2 8 9-12h-6l2-8z" fill="#ffc845"/></svg>',
+  ice:'<svg viewBox="0 0 24 24" fill="none" stroke="#9fd6ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M3.5 7l17 10M20.5 7l-17 10M9 3.5l3 2.5 3-2.5M9 20.5l3-2.5 3 2.5"/></svg>',
+  heat:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="#ff9a3c"/><g stroke="#ff9a3c" stroke-width="2" stroke-linecap="round"><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></svg>',
+  snow:'<svg viewBox="0 0 24 24" fill="none" stroke="#e8f3ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/></svg>',
+  cold:'<svg viewBox="0 0 24 24" fill="none" stroke="#9fd6ff" stroke-width="1.8" stroke-linecap="round"><path d="M10 14V5a2 2 0 1 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 17v-4"/></svg>',
+  aurora:'<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-width="2"><path d="M3 18c2-6 3-11 5-13M8 19c1-5 3-10 5-13M13 19c1-4 3-9 6-12" stroke="#5dffb0"/><path d="M18 19c.5-2 1.5-5 3-7" stroke="#b18cff"/></svg>'
+};
+
+/* ---------- datan haku ---------- */
+const cache=new Map();
+const bases=()=>{const p=(S.proxy||'').trim().replace(/\/$/,'');return {met:p?p+'/met':'https://api.met.no',swpc:p?p+'/swpc':'https://services.swpc.noaa.gov'}};
+async function getJSON(url,ttl=6e5){
+  const c=cache.get(url);if(c&&Date.now()-c.t<ttl)return c.v;
+  let r;try{r=await fetch(url)}catch(e){const er=new Error('net');er.net=true;throw er}
+  if(!r.ok){const er=new Error('HTTP '+r.status);er.status=r.status;throw er}
+  const v=await r.json();cache.set(url,{t:Date.now(),v});return v;
+}
+const r4=x=>Math.round(x*1e4)/1e4;
+async function loadAll(loc){
+  if(DEMO)return demoData(loc);
+  const b=bases(),q=`lat=${r4(loc.lat)}&lon=${r4(loc.lon)}`;
+  const fc=await getJSON(`${b.met}/weatherapi/locationforecast/2.0/complete?${q}`);
+  const [nc,kp,ov]=await Promise.allSettled([
+    getJSON(`${b.met}/weatherapi/nowcast/2.0/complete?${q}`,3e5),
+    getJSON(`${b.swpc}/products/noaa-planetary-k-index-forecast.json`,18e5),
+    getJSON(`${b.swpc}/json/ovation_aurora_latest.json`,9e5)]);
+  return {fc,nc:nc.status==='fulfilled'?nc.value:null,kp:kp.value||null,ov:ov.value||null};
+}
+
+/* ---------- esikatseludata (kun yhteydet on estetty) ---------- */
+const SCEN={
+  rainy:{days:[['rain',-1.5,4.5,6,16,100],['cloudy',-.5,1.5,.2,7,90],['snow',-3,-.5,4,8,100],['partlycloudy',-5,-2,0,5,45],['clearsky',-8,-4,0,3,5],['fair',-6,-3,0,4,20]],
+    hour:h=>h<1?'cloudy':h<3?'heavyrain':h<5?'lightrainshowers':h<8?'partlycloudy':'clearsky',
+    nc:m=>m<15?0:m<45?6+3*Math.sin((m-15)/30*Math.PI):m<55?.4:0},
+  arctic:{days:[['clearsky',-17,-11,0,4,3],['fair',-15,-9,0,4,15],['lightsnow',-10,-6,1,6,90],['cloudy',-9,-5,.2,5,85],['partlycloudy',-14,-8,0,3,40],['clearsky',-20,-12,0,2,2]],
+    hour:h=>h<20?'clearsky':'fair',nc:()=>0},
+  mild:{days:[['partlycloudy',2,6,.5,7,50],['lightrainshowers',3,7,2,9,70],['cloudy',2,5,.4,6,90],['fair',0,4,0,4,25],['rainshowers',1,6,3,10,75],['partlycloudy',0,5,.5,5,50]],
+    hour:h=>h<6?'partlycloudy':h<12?'cloudy':'fair',nc:()=>0}
+};
+const SUFFIX=/^(clearsky|fair|partlycloudy|.*showers.*)$/;
+const CLOUDOF=c=>{const s=parseSym(c);return s.type||s.fog?100:[3,18,45,90][s.sky]};
+function demoData(loc){
+  const sc=loc.lat>66?SCEN.arctic:(Math.abs(loc.lon-24.9)<1.5&&Math.abs(loc.lat-60.2)<1)?SCEN.rainy:SCEN.mild;
+  const t0=new Date();t0.setMinutes(0,0,0);const k0=dayKey(t0,loc.tz),keys=[k0];const ts=[];
+  for(let h=0;h<216;h+=h<60?1:6){
+    const t=new Date(+t0+h*36e5),k=dayKey(t,loc.tz);if(!keys.includes(k))keys.push(k);
+    const di=Math.min(keys.indexOf(k),sc.days.length-1),D=sc.days[di],lh=lHour(t,loc.tz);
+    const w=(1+Math.cos((lh-14.5)/24*2*Math.PI))/2;const temp=D[1]+(D[2]-D[1])*w;
+    let sym=h<30?sc.hour(h):D[0];
+    if(SUFFIX.test(sym))sym+=sunAlt(t,loc.lat,loc.lon)<-3?'_night':'_day';
+    const pr=parseSym(sym).type?D[3]/24*(parseSym(sym).inten||1)/1.5:0;
+    const wind=D[4]*(.45+.25*Math.sin(h/3)),gust=wind*1.6;
+    ts.push({time:t.toISOString(),data:{instant:{details:{air_temperature:+temp.toFixed(1),wind_speed:+wind.toFixed(1),wind_speed_of_gust:+(h===3&&sc===SCEN.rainy?16.4:gust).toFixed(1),wind_from_direction:210+h*2,relative_humidity:parseSym(sym).type?96:78,cloud_area_fraction:CLOUDOF(sym),ultraviolet_index_clear_sky:0}},
+      next_1_hours:{summary:{symbol_code:sym},details:{precipitation_amount:+pr.toFixed(1),probability_of_thunder:0}},
+      next_6_hours:{summary:{symbol_code:sym},details:{precipitation_amount:+(pr*6).toFixed(1)}}}});
+  }
+  const n0=new Date(Math.floor(Date.now()/3e5)*3e5);
+  const nc={properties:{meta:{radar_coverage:'ok'},timeseries:Array.from({length:25},(_,i)=>({time:new Date(+n0+i*3e5).toISOString(),data:{instant:{details:{precipitation_rate:+sc.nc(i*5).toFixed(2),air_temperature:ts[0].data.instant.details.air_temperature}}}}))}};
+  const d0=new Date();d0.setUTCHours(0,0,0,0);const kv=[2,2.33,1.67,2,3,3.67,4.33,4,3.33,2.67,2,2.33,3,3.33,3.67,3,2.67,2.33,2,2,2.33,2.67,3,2.67];
+  const kp=kv.map((v,i)=>({time_tag:new Date(+d0+i*108e5).toISOString().slice(0,19),kp:v,observed:'predicted'}));
+  return {fc:{properties:{timeseries:ts}},nc,kp,ov:null,scen:sc};
+}
+
+/* ---------- analyysi ---------- */
+function feelsLike(t,v){if(t<=10&&v>1.3){const k=Math.pow(v*3.6,.16);return 13.12+.6215*t-11.37*k+.3965*t*k}return t}
+function analyze(data,loc){
+  const ts=data.fc.properties.timeseries.map(e=>({t:new Date(e.time),i:e.data.instant.details,n1:e.data.next_1_hours,n6:e.data.next_6_hours,n12:e.data.next_12_hours}));
+  let k=0;ts.forEach((e,j)=>{if(+e.t<=Date.now())k=j});
+  const c=ts[k],sym=(c.n1||c.n6||c.n12||{summary:{}}).summary.symbol_code||'cloudy';
+  const cur={t:c.t,temp:c.i.air_temperature,feels:c.i.apparent_air_temperature??feelsLike(c.i.air_temperature,c.i.wind_speed),wind:c.i.wind_speed,gust:c.i.wind_speed_of_gust,dir:c.i.wind_from_direction,hum:c.i.relative_humidity,uv:c.i.ultraviolet_index_clear_sky,cloud:c.i.cloud_area_fraction,sym,p1:c.n1?.details?.precipitation_amount??0};
+  const hours=[];
+  for(let j=k;j<ts.length;j++){const e=ts[j];if(!e.n1)break;hours.push({t:e.t,temp:e.i.air_temperature,dir:e.i.wind_from_direction??0,sym:e.n1.summary.symbol_code,p:e.n1.details?.precipitation_amount||0,wind:e.i.wind_speed,gust:e.i.wind_speed_of_gust??e.i.wind_speed,cloud:e.i.cloud_area_fraction??50,thunder:e.n1.details?.probability_of_thunder||0,hum:e.i.relative_humidity})}
+  const today=dayKey(new Date(),loc.tz),map=new Map();
+  ts.forEach((e,j)=>{
+    const key=dayKey(e.t,loc.tz);if(!map.has(key))map.set(key,{key,t:e.t,temps:[],p:0,wind:0,sym:null,sd:99});
+    const d=map.get(key);d.temps.push(e.i.air_temperature);d.wind=Math.max(d.wind,e.i.wind_speed_of_gust??e.i.wind_speed);
+    const gap=j<ts.length-1?(ts[j+1].t-e.t)/36e5:0;
+    if(gap>.9&&gap<1.1)d.p+=e.n1?.details?.precipitation_amount||0;else if(gap>5.9&&gap<6.1)d.p+=e.n6?.details?.precipitation_amount||0;
+    const lh=lHour(e.t,loc.tz),dist=Math.abs(lh-12.5);const sc=e.n6||e.n12||e.n1;
+    if(sc&&dist<d.sd){d.sd=dist;d.sym=sc.summary.symbol_code}
+  });
+  const days=[...map.values()].filter(d=>d.key>today&&d.temps.length>=2).slice(0,5);
+  return {cur,hours,hourly:hours.slice(0,25),days,sun:sunTimes(loc)};
+}
+function parseKp(j){
+  if(!Array.isArray(j)||!j.length)return [];let rows=j;
+  if(Array.isArray(j[0])){const keys=j[0];rows=j.slice(1).map(r=>Object.fromEntries(keys.map((k,i)=>[k,r[i]])))}
+  return rows.map(r=>{const tt=r.time_tag||r.time||r.TimeTag,kp=+(r.kp??r.Kp??r.kp_index??r.estimated_kp);if(!tt||isNaN(kp))return null;
+    const t=new Date(/Z$|[+-]\d\d:?\d\d$/.test(tt)?tt:String(tt).replace(' ','T')+'Z');return isNaN(t)?null:{t,kp}}).filter(Boolean).sort((a,b)=>a.t-b.t);
+}
+function ovationAt(ov,lat,lon){
+  if(!ov||!Array.isArray(ov.coordinates))return null;
+  if(!ov._m){ov._m=new Map();for(const c of ov.coordinates)ov._m.set(c[0]+','+c[1],c[2])}
+  const L=((Math.round(lon)%360)+360)%360;let m=0;
+  for(let dy=0;dy<=4;dy++){const v=ov._m.get(L+','+Math.round(lat+dy));if(v!=null)m=Math.max(m,v*(dy?.75:1))}
+  return m;
+}
+function aurora(data,A,loc){
+  const hrs=A.hours.slice(0,20).map(h=>({t:h.t,cloud:h.cloud,alt:sunAlt(h.t,loc.lat,loc.lon)})).filter(h=>h.alt<-10);
+  if(!hrs.length)return null;
+  const kps=parseKp(data.kp),need=Math.max(.5,1.5+(68-loc.lat)*.4),ovP=ovationAt(data.ov,loc.lat,loc.lon);
+  const kpAt=t=>{let b=null;for(const x of kps)if(x.t<=t&&t-x.t<3*36e5)b=x;return b?b.kp:null};
+  let maxKp=0;
+  hrs.forEach(h=>{const kp=kpAt(h.t);if(kp!=null)maxKp=Math.max(maxKp,kp);
+    let act=kp==null?0:clamp((kp-need+1.2)/2.2,0,1);
+    if(ovP!=null&&Math.abs(h.t-Date.now())<1.5*36e5)act=Math.max(act,clamp(ovP/35,0,1));
+    h.act=act;h.clear=clamp(1-(h.cloud-10)/70,0,1);h.s=act*h.clear});
+  const best=hrs.reduce((a,b)=>b.s>a.s?b:a,hrs[0]),maxAct=Math.max(...hrs.map(h=>h.act));
+  const tz=loc.tz;let i0=hrs.indexOf(best),i1=i0;const th=Math.max(.18,best.s*.6);
+  while(i0>0&&hrs[i0-1].s>=th&&hrs[i0].t-hrs[i0-1].t<=36e5)i0--;
+  while(i1<hrs.length-1&&hrs[i1+1].s>=th&&hrs[i1+1].t-hrs[i1].t<=36e5)i1++;
+  let wide=false;if(i1-i0>=4){wide=true;let bj=i0,bs=-1;for(let j=i0;j<=i1-2;j++){const sm=hrs[j].s+hrs[j+1].s+hrs[j+2].s;if(sm>bs){bs=sm;bj=j}}i0=bj;i1=bj+2}
+  const win=`klo ${hm(hrs[i0].t,tz)}–${hm(new Date(+hrs[i1].t+36e5),tz)}`;
+  const avgCloud=hrs.slice(i0,i1+1).reduce((a,h)=>a+h.cloud,0)/(i1-i0+1);
+  const sky=avgCloud<15?'taivas on kirkas ja pilvetön':avgCloud<40?'taivas on enimmäkseen selkeä':'pilvien välistä voi aueta näkymiä';
+  const kpTxt=maxKp?` Kp-ennuste ${f1(maxKp)}, alueellasi revontulet näkyvät yleensä noin Kp ${f1(Math.round(need*2)/2)} alkaen.`:'';
+  const nowS=hrs.find(h=>Math.abs(h.t-Date.now())<36e5);
+  let lvl=0,text;
+  if(best.s>=.6){lvl=3;text=`Tänä yönä taivaalla on erittäin todennäköisesti revontulia. Koska ${sky}, voit ihastella niitä ${win} välisenä aikana${wide?' – parhaiten silloin, mutta niitä voi näkyä koko pimeän ajan':''}.`}
+  else if(best.s>=.35){lvl=2;text=`Revontulet ovat tänä yönä todennäköisiä, ja ${sky}. Paras hetki on ${win}; katso pohjoiseen, poissa katuvaloista.`}
+  else if(best.s>=.18){lvl=1;text=`Revontulia voi mahdollisesti näkyä ${win} pohjoisella taivaalla.`}
+  else if(maxAct>=.45)text=`Revontuliaktiivisuus on korkealla, mutta pilvet peittävät taivaan todennäköisesti koko yön.`;
+  else text=`Revontulet ovat tänä yönä epätodennäköisiä.`;
+  return {lvl,text:text+(lvl||maxAct>=.45?kpTxt:''),maxKp,need,now:nowS?nowS.s:0,missing:!kps.length};
+}
+function radarText(data,A,loc){
+  const nc=data.nc,tz=loc.tz,TH=.1;
+  const typ=t=>t<=0?'snow':t<=2?'sleet':'rain';
+  const NOUN={rain:'sade',sleet:'räntäsade',snow:'lumisade'},OBJ={rain:'',sleet:' räntää',snow:' lunta'};
+  const adj=r=>r<.5?'heikko':r<2?'kohtalainen':r<5?'voimakas':'erittäin voimakas';
+  const dur=m=>m<60?`${m} minuuttia`:`${Math.floor(m/60)} t${m%60?' '+m%60+' min':''}`;
+  const until=t=>dur(Math.max(5,Math.round((t-Date.now())/3e5)*5));
+  if(nc&&nc.properties&&Array.isArray(nc.properties.timeseries)&&(nc.properties.meta||{}).radar_coverage!=='no coverage'){
+    const ser=nc.properties.timeseries.map(e=>({t:new Date(e.time),r:e.data.instant.details.precipitation_rate??0,temp:e.data.instant.details.air_temperature??A.cur.temp})).filter(e=>+e.t>Date.now()-5*6e4);
+    if(ser.length>3){
+      const wet=ser.map(e=>e.r>=TH),peak=(a,b)=>Math.max(...ser.slice(a,b).map(e=>e.r));
+      const dryAt=from=>wet.findIndex((w,i)=>i>from&&!w&&(i+1>=wet.length||!wet[i+1]));
+      let text;
+      if(wet[0]){const ty=typ(ser[0].temp),end=dryAt(0);
+        text=end<0?`Sadetutkan mukaan nyt sataa${OBJ[ty]}, ja ${NOUN[ty]} jatkuu ainakin seuraavat kaksi tuntia. ${cap(NOUN[ty])} on ${adj(peak(0,ser.length))}.`
+                  :`Sadetutkan mukaan nyt sataa${OBJ[ty]}. ${cap(NOUN[ty])} näyttäisi lakkaavan noin ${until(ser[end].t)} päästä (klo ${hm(ser[end].t,tz)}), ja se on ${adj(peak(0,end))}.`}
+      else{const st=wet.indexOf(true);
+        if(st<0)text='Sadetutkan mukaan seuraavien kahden tunnin aikana ei ole odotettavissa sadetta.';
+        else{const ty=typ(ser[st].temp),en=dryAt(st),m=en<0?null:Math.round((ser[en].t-ser[st].t)/3e5)*5;
+          text=`Näyttää siltä, että sadetutkan perusteella noin ${until(ser[st].t)} päästä (klo ${hm(ser[st].t,tz)}) alkaa sataa${OBJ[ty]}. `+
+            (m?`${cap(NOUN[ty])} kestäisi ennusteen mukaan noin ${dur(m)} ja on ${adj(peak(st,en))}.`:`${cap(NOUN[ty])} jatkuisi tutkaennusteen mukaan yli kahden tunnin ja on ${adj(peak(st,ser.length))}.`)}}
+      return {radar:true,text,ser:ser.slice(0,25)};
+    }
+  }
+  const H=A.hours.slice(0,8),w=H.map(h=>h.p>=.1);let text;
+  if(w[0]){const e=w.indexOf(false);text=`Tälle alueelle ei ole tutkapohjaista lähiennustetta. Sääennusteen mukaan sataa nyt${e>0?` noin klo ${hm(H[e].t,loc.tz)} asti`:' vielä useita tunteja'}.`}
+  else{const s=w.indexOf(true);text=`Tälle alueelle ei ole tutkapohjaista lähiennustetta. `+(s>0?`Sääennusteen mukaan sade alkaa noin klo ${hm(H[s].t,loc.tz)}.`:'Sääennusteen mukaan lähituntien aikana ei sada.')}
+  return {radar:false,text,ser:null};
+}
+function phenomena(A,loc){
+  const out=[],H=A.hours.slice(0,24),tz=loc.tz;
+  if(H.length){
+    const g=Math.max(...H.map(h=>h.gust));
+    if(g>=15){const h=H.find(x=>x.gust===g);out.push({k:'wind',lvl:g>=20?2:1,title:g>=20?'Kova tuuli':'Puuskainen tuuli',text:`Tuulenpuuskat voimistuvat jopa ${Math.round(g)} m/s noin klo ${hm(h.t,tz)}.${g>=20?' Varaudu kaatuviin puihin ja irtoaviin esineisiin.':''}`})}
+    const th=H.find(h=>h.thunder>=25||/thunder/.test(h.sym));
+    if(th)out.push({k:'thunder',lvl:2,title:'Ukkosriski',text:`Ukkonen on mahdollinen noin klo ${hm(th.t,tz)} alkaen${th.thunder?` (todennäköisyys ${Math.round(th.thunder)} %)`:''}.`});
+    for(let i=1;i<Math.min(H.length,18);i++){if(H[i-1].temp>0&&H[i].temp<=0){
+      const wet=A.cur.p1>0||H.slice(Math.max(0,i-8),i+1).some(h=>h.p>.05)||H[i].hum>=92;
+      if(wet)out.push({k:'ice',lvl:2,title:'Mustan jään riski',text:`Lämpötila laskee pakkasen puolelle noin klo ${hm(H[i].t,tz)}. Märät tiet ja kävelytiet voivat jäätyä liukkaiksi.`});break}}
+  }
+  const m=lMonth(new Date(),tz),snowSoon=A.hours.slice(0,48).find(h=>parseSym(h.sym).type==='snow')||A.days.slice(0,2).find(d=>parseSym(d.sym).type==='snow');
+  if(snowSoon&&m>=9&&m<=11&&A.cur.temp>-3)out.push({k:'snow',lvl:1,title:'Lunta tulossa',text:`Ennusteessa on lumisadetta ${A.hours.includes(snowSoon)?'noin klo '+hm(snowSoon.t,tz):fmt(snowSoon.t,tz,{weekday:'long'})+'na'} – syksyllä se voi olla ensilumi, joten varaa talvirenkaat.`});
+  const hot=A.days.filter(d=>Math.max(...d.temps)>=27);
+  if(hot.length)out.push({k:'heat',lvl:hot.length>=3?2:1,title:hot.length>=3?'Helleaalto':'Hellepäivä',text:`Lämpötila nousee yli 27 asteen ${hot.length} päivänä seuraavien viiden päivän aikana. Juo riittävästi ja vältä keskipäivän aurinkoa.`});
+  const cold=A.days.find(d=>Math.min(...d.temps)<=-25);
+  if(cold)out.push({k:'cold',lvl:1,title:'Kova pakkanen',text:`Lämpötila laskee ${deg(Math.min(...cold.temps))} asteeseen ${fmt(cold.t,tz,{weekday:'long'})}na. Suojaa kasvot ja raajat.`});
+  return out;
+}
+
+/* ---------- renderöinti ---------- */
+const DIRS=['P','KO','I','KA','E','LO','L','LU'];
+const arrow=d=>`<svg class="arrow" viewBox="0 0 16 16" style="transform:rotate(${(d+180)%360}deg)" aria-hidden="true"><path d="M8 1.5l4.5 12L8 10.6 3.5 13.5z" fill="currentColor"/></svg>`;
+const TSTOP=[[-25,[122,167,255]],[-10,[143,195,255]],[0,[191,227,255]],[10,[255,224,138]],[20,[255,179,92]],[30,[255,107,74]]];
+function tcol(t){for(let i=1;i<TSTOP.length;i++){if(t<=TSTOP[i][0]){const [a,ca]=TSTOP[i-1],[b,cb]=TSTOP[i],f=clamp((t-a)/(b-a),0,1);return `rgb(${ca.map((v,j)=>Math.round(v+(cb[j]-v)*f)).join(',')})`}}return 'rgb(255,107,74)'}
+const uvTxt=u=>u<3?'matala':u<6?'kohtalainen':u<8?'korkea':'erittäin korkea';
+function headHTML(loc){
+  return `<div class="ph"><button class="loc-btn" data-act="loc" aria-label="Vaihda paikkakuntaa: ${esc(loc.name)}"><span>${esc(loc.name)}</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 8l5 5 5-5"/></svg></button>
+  <button class="tbtn sm" data-act="refresh" aria-label="Päivitä"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg></button></div>
+  <div class="sub">${esc(loc.region||'')}${loc.region?' · ':''}klo <span class="clk">${hm(new Date(),loc.tz)}</span>${DEMO?' · esikatseludata':''}</div>
+  <div class="favs">${S.favs.map((f,j)=>`<button class="chip" data-fav="${j}" aria-pressed="${sameLoc(f,loc)}">${esc(f.name)}</button>`).join('')}</div>`;
+}
+const MI={
+  wind:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/></svg>',
+  rise:'<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-width="1.8"><path d="M5.5 18a6.5 6.5 0 0 1 13 0z" fill="var(--ic-sun)"/><path d="M2.5 18h19" stroke="currentColor"/><path d="M12 2.5v6M9.2 5.3 12 2.5l2.8 2.8" stroke="currentColor"/></svg>',
+  set:'<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-width="1.8"><path d="M5.5 18a6.5 6.5 0 0 1 13 0z" fill="var(--ic-sun)"/><path d="M2.5 18h19" stroke="currentColor"/><path d="M12 2.5v6M9.2 5.7 12 8.5l2.8-2.8" stroke="currentColor"/></svg>',
+  len:'<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="9" r="4" fill="var(--ic-sun)"/><path d="M3 18h18M5.5 15.5 3 18l2.5 2.5M18.5 15.5 21 18l-2.5 2.5" stroke="currentColor"/></svg>',
+  uv:'<svg viewBox="0 0 24 24" fill="none" stroke="var(--ic-sun)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.5" fill="var(--ic-sun)"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>'
+};
+const durTxt=ms=>{const m=Math.round(ms/6e4);return `${Math.floor(m/60)} t ${m%60} min`};
+function heroHTML(A,loc){
+  const c=A.cur,s=A.sun,tz=loc.tz,dir=DIRS[Math.round((c.dir||0)/45)%8];
+  const mi=(ic,body,lbl)=>`<div class="mi" title="${lbl}"><span class="mic" aria-hidden="true">${ic}</span><span class="vh">${lbl}: </span>${body}</div>`;
+  const items=[mi(MI.wind,`<b>${Math.round(c.wind)} m/s</b>${arrow(c.dir||0)}<em>${dir}</em>`,'Tuuli')];
+  if(c.uv!=null&&c.uv>=.5)items.push(mi(MI.uv,`<b>UV ${f1(c.uv)}</b><em>${uvTxt(c.uv)}</em>`,'UV-indeksi'));
+  if(s.polar==='night')items.push(mi(MI.set,'<b>Kaamos</b>','Aurinko'),mi(MI.len,'<b>0 t</b>','Päivän pituus'));
+  else if(s.polar==='day')items.push(mi(MI.rise,'<b>Yötön yö</b>','Aurinko'),mi(MI.len,'<b>24 t</b>','Päivän pituus'));
+  else{
+    if(s.rise)items.push(mi(MI.rise,`<b>${hm(s.rise,tz)}</b>`,'Auringonnousu'));
+    if(s.set)items.push(mi(MI.set,`<b>${hm(s.set,tz)}</b>`,'Auringonlasku'));
+    if(s.rise&&s.set&&s.set>s.rise)items.push(mi(MI.len,`<b>${durTxt(s.set-s.rise)}</b>`,'Päivän pituus'));
+  }
+  return `${icon(c.sym,140)}<div><div class="bigt">${deg(c.temp)}</div><div class="cond">${descSym(c.sym)}</div><div class="feels">Tuntuu kuin <b>${deg(c.feels)}</b></div></div>
+    <div class="metrics">${items.join('')}</div>
+    <div class="dgw"><div class="dgh"></div><div class="dg" role="img"></div></div>`;
+}
+function curvePath(P){
+  let d=`M${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
+  for(let i=0;i<P.length-1;i++){const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
+    d+=` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)} ${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)} ${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`}
+  return d;
+}
+/* Loppupäivän graafi: alkaa aina tästä hetkestä, päättyy keskiyöhön */
+function dayGraph(p){
+  const box=p&&$('.dg',p),head=p&&$('.dgh',p);if(!box||!p._A)return;
+  const A=p._A,loc=p._loc,tz=loc.tz,H=A.hours,W=box.clientWidth;if(!W||H.length<2)return;
+  const now=Date.now();let end=now+(24-lHour(new Date(now),tz))*36e5,title='Loppupäivä';
+  if(end-now<3*36e5){end=now+6*36e5;title='Seuraavat 6 tuntia'}
+  const tAt=t=>{for(let i=0;i<H.length-1;i++){const a=H[i],b=H[i+1];if(+a.t<=t&&t<=+b.t)return a.temp+(b.temp-a.temp)*(t-a.t)/(b.t-a.t)}return t<+H[0].t?H[0].temp:H[H.length-1].temp};
+  const pts=[{t:now,v:tAt(now),now:true,w:A.cur.wind,dir:A.cur.dir||0}];
+  H.forEach(h=>{if(+h.t>now+5*6e4&&+h.t<end-5*6e4)pts.push({t:+h.t,v:h.temp,w:h.wind,dir:h.dir})});
+  pts.push({t:end,v:tAt(end),end:true});
+  const bars=H.filter(h=>+h.t<end&&+h.t+36e5>now&&h.p>0).map(h=>({a:Math.max(+h.t,now),b:Math.min(+h.t+36e5,end),p:h.p}));
+  const vs=pts.map(x=>x.v),mn=Math.min(...vs),mx=Math.max(...vs),pad=Math.max(1,(4-(mx-mn))/2),lo=mn-pad,hi=mx+pad;
+  const top=24,ph=74,bt=top+ph+34,L=4,R=W-4;
+  const X=t=>L+(t-now)/(end-now)*(R-L),Y=v=>top+(hi-v)/(hi-lo)*ph;
+  const P=pts.map(x=>[X(x.t),Y(x.v)]),d=curvePath(P);
+  const z=clamp((Y(0)-top)/ph,0,1),id='dgc'+p.dataset.i;
+  const RED='#ff5b5b',BLUE='#4fa8ff';
+  const grad=`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${top}" x2="0" y2="${top+ph}"><stop offset="0" stop-color="${hi>0?RED:BLUE}"/><stop offset="${z.toFixed(4)}" stop-color="${hi>0?RED:BLUE}"/><stop offset="${z.toFixed(4)}" stop-color="${BLUE}"/><stop offset="1" stop-color="${BLUE}"/></linearGradient>`;
+  const zero=lo<0&&hi>0?`<line x1="${L}" x2="${R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="3 4"/><text class="ax" x="${R}" y="${(Y(0)-4).toFixed(1)}" text-anchor="end">0°</text>`:'';
+  const maxP=Math.max(2,...bars.map(b=>b.p)),bh=26,by=bt;
+  const bar=bars.map(b=>{const x0=X(b.a),x1=X(b.b),w=Math.max(3,(x1-x0)*.62),h=Math.max(3,b.p/maxP*bh);
+    return `<rect x="${((x0+x1)/2-w/2).toFixed(1)}" y="${(by-h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--ic-drop)"><title>${f1(b.p)} mm</title></rect>`}).join('');
+  const step=Math.max(1,Math.ceil(46/((R-L)/Math.max(1,(end-now)/36e5))));
+  let lastX=-99;
+  const lab=pts.map((x,i)=>{if(x.end)return '';const hr=i-1;if(!x.now&&(hr%step||X(x.t)>R-30||X(x.t)-lastX<48))return '';const [px,py]=P[i];lastX=px;
+    const wc=x.w>=15?RED:x.w>=10?(S.skin==='paperi'?'#d46a00':'#ffb35c'):'currentColor',wy=bt+38;
+    const wind=x.w==null?'':`<g transform="translate(${(x.now?px+7:px).toFixed(1)} ${wy}) rotate(${((x.dir+180)%360).toFixed(0)})"><path d="M0 -8 L5.5 6 L0 3 L-5.5 6Z" fill="${wc}"/></g><text class="ws" x="${(x.now?px+7:px).toFixed(1)}" y="${wy+24}" text-anchor="middle" fill="${wc}">${Math.round(x.w)}</text>`;
+    return wind+`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="${x.v>0?RED:BLUE}"/><text x="${px.toFixed(1)}" y="${(py-9).toFixed(1)}" text-anchor="${x.now?'start':'middle'}">${deg(x.v)}</text><text class="ax" x="${px.toFixed(1)}" y="${bt+18}" text-anchor="${x.now?'start':'middle'}">${x.now?'Nyt':String(Math.round(lHour(new Date(x.t),tz))%24).padStart(2,'0')}</text>`}).join('');
+  const base=Y(clamp(0,lo,hi)).toFixed(1),area=`${d} L${R} ${base} L${L} ${base} Z`;
+  const SH=bt+70;box.style.height=SH+'px';
+  box.innerHTML=`<svg width="${W}" height="${SH}" viewBox="0 0 ${W} ${SH}" aria-hidden="true"><defs>${grad}</defs>
+    <path d="${area}" fill="url(#${id})" opacity=".2"/>${zero}
+    <line x1="${L}" x2="${R}" y1="${by}" y2="${by}" stroke="currentColor" stroke-opacity=".18"/>${bar}
+    <path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2.8" stroke-linecap="round"/>${lab}</svg>`;
+  const tot=bars.reduce((a,b)=>a+b.p*(b.b-b.a)/36e5,0);
+  const ws=pts.filter(x=>x.w!=null).map(x=>x.w),wmn=Math.round(Math.min(...ws)),wmx=Math.round(Math.max(...ws));
+  const wTxt=wmn===wmx?`tuuli ${wmx} m/s`:`tuuli ${wmn}–${wmx} m/s`;
+  head.innerHTML=`<span><b>${title}</b> · alin ${deg(mn)}, ylin ${deg(mx)}</span><span>${tot>=.1?`sadetta noin ${f1(tot)} mm`:'ei sadetta'} · ${wTxt}</span>`;
+  box.setAttribute('aria-label',`${title}: lämpötila ${deg(vs[0])} nyt, alin ${deg(mn)}, ylin ${deg(mx)}. ${tot>=.1?'Sadetta noin '+f1(tot)+' mm.':'Ei sadetta.'} Tuuli ${wmn}–${wmx} m/s.`);
+}
+function radarTextHTML(R){
+  const bars=R.ser?`<div class="ncb" aria-hidden="true">${R.ser.map(e=>`<i class="${e.r>=.1?'w':''}" style="height:${Math.round(clamp(Math.sqrt(e.r/8),0.06,1)*100)}%"></i>`).join('')}</div><div class="ncax"><span>Nyt</span><span>+1 t</span><span>+2 t</span></div>`:'';
+  return `<h3>${R.radar?'Sadetutkan lähiennuste':'Lähiennuste'}</h3><p class="nct">${R.text}</p>${bars}`;
+}
+function phenHTML(list,au){
+  const cards=[];
+  if(au&&au.lvl>=1)cards.push(`<div class="glass pc aur"><div class="pi">${PI.aurora}</div><div><b>Revontulivahti</b><p>${au.text}</p></div></div>`);
+  list.forEach(p=>cards.push(`<div class="glass pc ${p.lvl>=2?'l2':''}"><div class="pi">${PI[p.k]}</div><div><b>${p.title}</b><p>${p.text}</p></div></div>`));
+  if(au&&au.lvl===0)cards.push(`<div class="glass pline">Revontulivahti: ${au.text}${au.missing?' (avaruussäädataa ei saatu)':''}</div>`);
+  return cards.join('');
+}
+function hourlyHTML(A,loc){
+  const H=A.hourly;if(!H.length)return '';
+  const cw=58,ch=64,W=cw*H.length,ts=H.map(h=>h.temp),mn=Math.min(...ts),mx=Math.max(...ts),sp=Math.max(3,mx-mn);
+  const P=H.map((h,i)=>[i*cw+cw/2,20+(1-(h.temp-mn)/sp)*(ch-30)]);
+  let d=`M${P[0][0]} ${P[0][1].toFixed(1)}`;
+  for(let i=0;i<P.length-1;i++){const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
+    d+=` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)} ${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)} ${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0]} ${p2[1].toFixed(1)}`}
+  const lbl=P.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1].toFixed(1)}" r="2.6" fill="${tcol(H[i].temp)}"/><text x="${p[0]}" y="${(p[1]-8).toFixed(1)}" text-anchor="middle">${deg(H[i].temp)}</text>`).join('');
+  const cols=H.map((h,i)=>{const lh=Math.floor(lHour(h.t,loc.tz));return `<div class="hcol"><span class="ht">${i===0?'Nyt':String(lh).padStart(2,'0')}</span>${icon(h.sym,32)}<span class="hsp"></span><span class="hp" title="${f1(h.p)} mm"><i style="height:${Math.round(clamp(h.p/3,0,1)*100)}%"></i></span><span class="hpl">${h.p>=.1?f1(h.p):''}</span></div>`}).join('');
+  const mid=H.map((h,i)=>i>0&&Math.floor(lHour(h.t,loc.tz))===0?`<span class="hday" style="left:${i*cw}px"></span>`:'').join('');
+  return `<h3>Seuraavat 24 tuntia</h3><div class="hscroll"><div class="hrow">${mid}${cols}<svg class="hcurve" width="${W}" height="${ch}" viewBox="0 0 ${W} ${ch}" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-opacity=".75" stroke-width="2"/>${lbl}</svg></div></div>`;
+}
+function daysHTML(A,loc){
+  const D=A.days;if(!D.length)return '';
+  const lo=Math.min(...D.map(d=>Math.min(...d.temps))),hi=Math.max(...D.map(d=>Math.max(...d.temps))),sp=Math.max(1,hi-lo);
+  return `<h3>Viiden päivän ennuste</h3>`+D.map(d=>{const mn=Math.min(...d.temps),mx=Math.max(...d.temps);
+    return `<div class="day"><div class="dn"><b>${cap(fmt(d.t,loc.tz,{weekday:'short'}))}</b><small>${fmt(d.t,loc.tz,{day:'numeric',month:'numeric'})}</small></div>${icon(d.sym,38)}<div class="dp">${d.p>=.1?f1(d.p)+' mm':'&nbsp;'}<small>${Math.round(d.wind)} m/s</small></div><span class="tmin">${deg(mn)}</span><div class="rb"><i style="left:${((mn-lo)/sp*100).toFixed(1)}%;right:${((hi-mx)/sp*100).toFixed(1)}%;background:linear-gradient(90deg,${tcol(mn)},${tcol(mx)})"></i></div><span class="tmax">${deg(mx)}</span></div>`}).join('');
+}
+
+/* ---------- taivas: koko paneelin sääefekti ---------- */
+const PAL={clear:[['#2a7fdc','#8cc8f5'],['#040a1e','#152450']],fair:[['#3584d6','#9fcdee'],['#060c22','#1a2650']],partly:[['#4f8cc4','#b4d3ea'],['#0b1226','#243052']],
+  cloudy:[['#6f7f90','#b3bdc7'],['#12161e','#2a313d']],rain:[['#47566a','#7f8c9b'],['#0c1119','#222a36']],sleet:[['#5a6878','#98a4b0'],['#10151d','#2a323e']],
+  snow:[['#91a3b8','#d6dee7'],['#161d2b','#39445a']],thunder:[['#272d3c','#525a6e'],['#07090f','#1b1f2b']],fog:[['#98a3ac','#d3d8db'],['#1a1d22','#373c43']]};
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const mix=(a,b,f)=>{const A=hex(a),B=hex(b);return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*f).toString(16).padStart(2,'0')).join('')};
+const COVER={clear:.02,fair:.2,partly:.5,cloudy:.95,rain:1,sleet:1,snow:1,thunder:1,fog:.7};
+const PRESET={clear:['clear',0],partly:['partly',0],cloudy:['cloudy',0],rain:['rain',2],heavy:['rain',3],storm:['thunder',3],snow:['snow',2],sleet:['sleet',2],fog:['fog',0]};
+function skyState(A,loc,au){
+  const s=parseSym(A.cur.sym);
+  let cond=s.thunder?'thunder':s.type||(s.fog?'fog':['clear','fair','partly','cloudy'][s.sky]),inten=s.inten,alt=sunAlt(new Date(),loc.lat,loc.lon),aur=au&&alt<-10?au.now:0;
+  const pv=S.preview;
+  if(pv==='night'){cond='clear';inten=0;alt=-30;aur=.85}
+  else if(pv==='sunset'){cond='fair';inten=0;alt=1}
+  else if(PRESET[pv]){[cond,inten]=PRESET[pv];aur=0}
+  return {cond,inten,cover:COVER[cond],alt,wind:A.cur.wind||3,aur};
+}
+function skyColors(st){
+  const p=PAL[st.cond]||PAL.cloudy,f=smooth(-9,4,st.alt);
+  let a=mix(p[1][0],p[0][0],f),b=mix(p[1][1],p[0][1],f);
+  const warm=(1-Math.min(1,Math.abs(st.alt-.5)/7))*(1-st.cover*.8);
+  if(warm>0){b=mix(b,'#f39a6b',warm*.75);a=mix(a,'#3b4a8a',warm*.35)}
+  const sk=S.skin;
+  if(sk==='paperi'){a=mix(a,'#f3efe6',.72);b=mix(b,'#faf8f3',.78)}
+  else if(sk==='yo'){a=mix(a,'#000000',.72);b=mix(b,'#000000',.88)}
+  else if(sk==='revontuli'){a=mix(a,'#05202a',.45);b=mix(b,'#0c3a3c',.38)}
+  return [a,b];
+}
+function cloudSprite(rgb){
+  const c=document.createElement('canvas');c.width=340;c.height=170;const g=c.getContext('2d');
+  [[95,100,58],[155,78,72],[222,96,58],[272,110,40],[60,116,38],[165,122,62]].forEach(([x,y,r])=>{const gr=g.createRadialGradient(x,y,0,x,y,r);
+    gr.addColorStop(0,`rgba(${rgb},.85)`);gr.addColorStop(.6,`rgba(${rgb},.5)`);gr.addColorStop(1,`rgba(${rgb},0)`);g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill()});
+  return c;
+}
+const SPR={};
+const spr=k=>SPR[k]||(SPR[k]=cloudSprite({light:'255,255,255',dark:'78,86,100',ink:'120,132,150'}[k]));
+class Sky{
+  constructor(cv){this.cv=cv;this.g=cv.getContext('2d');this.st=null;this.t=0;this.flash=0;this.next=2+Math.random()*4;this.acc=0;
+    this.ro=new ResizeObserver(()=>this.resize());this.ro.observe(cv)}
+  resize(){const dpr=Math.min(devicePixelRatio||1,1.5),w=this.cv.clientWidth,h=this.cv.clientHeight;if(!w||!h)return;
+    this.cv.width=Math.round(w*dpr);this.cv.height=Math.round(h*dpr);this.g.setTransform(dpr,0,0,dpr,0,0);this.W=w;this.H=h;this.build();this.draw(0)}
+  set(st){this.st=st;this.build();this.draw(0)}
+  build(){
+    if(!this.st||!this.W)return;const {W,H}=this,st=this.st,k=S.anim==='lite'?.45:1,area=clamp(W*H/(900*700),.25,2.5),R=Math.random;
+    this.stars=Array.from({length:Math.round(150*area)},()=>({x:R()*W,y:R()*H*.8,r:R()*1.15+.3,ph:R()*6}));
+    const n=Math.round(({clear:0,fair:3,partly:6,cloudy:11,rain:11,sleet:11,snow:9,thunder:12,fog:4}[st.cond]??5)*Math.max(.7,Math.sqrt(area)));
+    const sc=Math.max(W,480)/900*1.5;
+    this.clouds=Array.from({length:n},()=>({x:R()*W*1.4-W*.3,y:R()*H*(st.cover>.8?.55:.38)-H*.06,s:sc*(.6+R()*.9),v:(.2+R()*.4)*(1+st.wind/5),a:.45+R()*.55}));
+    const pc=st.cond==='rain'||st.cond==='thunder'?[0,90,190,340][Math.max(1,st.inten)]:st.cond==='sleet'?140:st.cond==='snow'?[0,80,150,260][Math.max(1,st.inten)]:0;
+    this.drops=Array.from({length:Math.round(pc*area*k)},()=>this.drop(true));
+    this.fog=st.cond==='fog'?Array.from({length:5},(_,i)=>({y:H*(.35+i*.14),x:R()*W,v:6+R()*8})):[];
+  }
+  drop(init){const {W,H}=this,st=this.st,snow=st.cond==='snow'||(st.cond==='sleet'&&Math.random()<.5);
+    return {x:Math.random()*W*1.3-W*.15,y:init?Math.random()*H:-20,snow,len:9+Math.random()*16,v:snow?28+Math.random()*40:520+Math.random()*380,r:1+Math.random()*2.3,ph:Math.random()*6}}
+  draw(dt){
+    const g=this.g,{W,H}=this,st=this.st;if(!st||!W)return;
+    if(S.anim==='lite'){this.acc+=dt;if(dt&&this.acc<1/30)return;dt=this.acc;this.acc=0}
+    this.t+=dt;const t=this.t;g.clearRect(0,0,W,H);
+    const night=1-smooth(-9,2,st.alt),paper=S.skin==='paperi',ink=paper?'60,80,110':'225,235,255';
+    if(night>.05&&st.cover<.9){const a=night*(1-st.cover)*(paper?.5:1);
+      for(const s of this.stars){g.globalAlpha=a*(.55+.45*Math.sin(t*1.6+s.ph));g.fillStyle=paper?'#5b6b85':'#fff';g.beginPath();g.arc(s.x,s.y,s.r,0,7);g.fill()}g.globalAlpha=1}
+    if(st.aur>.05&&night>.5){
+      for(let b=0;b<3;b++){const base=H*(.18+b*.07),amp=H*.05;g.globalAlpha=st.aur*(paper?.25:.42)*(1-b*.25);
+        for(let x=0;x<W;x+=4){const y=base+Math.sin(x/W*5+t*.25+b*1.7)*amp+Math.sin(x/W*13-t*.4)*amp*.35,h=H*(.16+.08*Math.sin(x/90+t*.5+b));
+          const gr=g.createLinearGradient(0,y-h,0,y);gr.addColorStop(0,'rgba(170,120,255,0)');gr.addColorStop(.55,'rgba(110,255,190,.55)');gr.addColorStop(1,'rgba(80,255,170,0)');g.fillStyle=gr;g.fillRect(x,y-h,4,h)}}
+      g.globalAlpha=1}
+    if(st.cover<.9){const vis=1-st.cover;
+      if(st.alt>-3){const x=W*.8,y=H*.13,R=Math.max(W,H)*.65,gr=g.createRadialGradient(x,y,0,x,y,R),a=vis*smooth(-3,6,st.alt);
+        gr.addColorStop(0,`rgba(255,246,214,${.75*a})`);gr.addColorStop(.12,`rgba(255,226,160,${.32*a})`);gr.addColorStop(1,'rgba(255,220,160,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);
+        g.save();g.translate(x,y);g.rotate(t*.015);g.globalAlpha=.07*a;g.fillStyle='#fff';
+        for(let i=0;i<12;i++){g.rotate(Math.PI/6);g.beginPath();g.moveTo(0,0);g.lineTo(R*.9,-R*.04);g.lineTo(R*.9,R*.04);g.fill()}g.restore();g.globalAlpha=1}
+      else if(night>.6){const x=W*.8,y=H*.13,gr=g.createRadialGradient(x,y,0,x,y,90);gr.addColorStop(0,`rgba(240,236,210,${.35*vis})`);gr.addColorStop(1,'rgba(240,236,210,0)');g.fillStyle=gr;g.fillRect(x-90,y-90,180,180);
+        g.globalAlpha=vis*(paper?.6:.95);g.fillStyle=paper?'#c2b78f':'#f3ecd2';g.beginPath();g.arc(x,y,14,0,7);g.fill();g.globalAlpha=1}}
+    const dark=st.cond==='thunder'||st.cond==='rain'&&st.inten>=2,sp=paper?spr('ink'):spr(dark?'dark':'light');
+    for(const c of this.clouds){c.x+=c.v*dt*8;const w=sp.width*c.s*.6,h=sp.height*c.s*.6;if(c.x>W+20)c.x=-w-20;
+      g.globalAlpha=c.a*(paper?.45:night>.6&&!dark?.35:.85);g.drawImage(sp,c.x,c.y,w,h)}
+    g.globalAlpha=1;
+    for(const f of this.fog){f.x=(f.x+f.v*dt)%(W*2);const gr=g.createLinearGradient(0,f.y-60,0,f.y+60);gr.addColorStop(0,'rgba(230,235,240,0)');gr.addColorStop(.5,`rgba(230,235,240,${paper?.35:.22})`);gr.addColorStop(1,'rgba(230,235,240,0)');
+      g.fillStyle=gr;g.fillRect(-W+f.x%W,f.y-60,W*2.2,120)}
+    if(this.drops.length){const wx=-(st.wind||3)*.04;g.lineCap='round';
+      for(const d of this.drops){
+        if(d.snow){d.y+=d.v*dt;d.x+=(Math.sin(t*1.3+d.ph)*14+st.wind*3)*dt;g.fillStyle=`rgba(${paper?'120,140,170':'255,255,255'},.85)`;g.beginPath();g.arc(d.x,d.y,d.r,0,7);g.fill()}
+        else{d.y+=d.v*dt;d.x+=d.v*dt*-wx;g.strokeStyle=`rgba(${ink},${paper?.45:.42})`;g.lineWidth=1.1;g.beginPath();g.moveTo(d.x,d.y);g.lineTo(d.x+d.len*-wx,d.y-d.len);g.stroke()}
+        if(d.y>H+20||d.x>W+40||d.x<-60)Object.assign(d,this.drop(false))}}
+    if(st.cond==='thunder'&&dt){this.next-=dt;if(this.next<0){this.flash=1;this.next=3+Math.random()*7;this.bx=W*(.2+Math.random()*.6)}
+      if(this.flash>0){g.fillStyle=`rgba(255,255,255,${this.flash*.35})`;g.fillRect(0,0,W,H);
+        if(this.flash>.7){g.strokeStyle=`rgba(255,255,240,${this.flash})`;g.lineWidth=2;g.beginPath();let x=this.bx,y=0;g.moveTo(x,y);while(y<H*.6){x+=(Math.random()-.5)*40;y+=20+Math.random()*25;g.lineTo(x,y)}g.stroke()}
+        this.flash-=dt*2.6}}
+  }
+}
+
+/* ---------- sadetutka ---------- */
+class RadarSim{
+  constructor(box,rainy){this.cv=document.createElement('canvas');box.append(this.cv);this.g=this.cv.getContext('2d');this.rainy=rainy;this.t=0;
+    const R=Math.random;this.blobs=rainy?Array.from({length:7},(_,i)=>({x:-.9+R()*.5-i*.04,y:.55+R()*.5,r:.18+R()*.22,i:.4+R()*.6})):Array.from({length:3},()=>({x:-1.2+R()*.4,y:-.8+R()*.4,r:.12+R()*.1,i:.3}))}
+  draw(dt){const c=this.cv,w=c.clientWidth,h=c.clientHeight;if(!w)return;const dpr=Math.min(devicePixelRatio||1,1.5);
+    if(c.width!==Math.round(w*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}const g=this.g;g.setTransform(dpr,0,0,dpr,0,0);
+    this.t=(this.t+dt/10)%1;const m=-60+this.t*120;this.min=m;
+    g.fillStyle='#0e1824';g.fillRect(0,0,w,h);g.strokeStyle='rgba(255,255,255,.06)';g.lineWidth=1;
+    for(let x=0;x<w;x+=36){g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke()}for(let y=0;y<h;y+=36){g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke()}
+    const cx=w/2,cy=h/2,S2=Math.min(w,h)*.5;g.strokeStyle='rgba(255,255,255,.14)';[.45,.9].forEach(r=>{g.beginPath();g.arc(cx,cy,S2*r,0,7);g.stroke()});
+    for(const b of this.blobs){const x=cx+(b.x+m/60*.9+.9)*S2,y=cy+(b.y-(m/60*.9+.9)*.62)*S2,r=b.r*S2,gr=g.createRadialGradient(x,y,0,x,y,r);
+      gr.addColorStop(0,`rgba(${b.i>.7?'120,80,230':'40,120,255'},.85)`);gr.addColorStop(.5,'rgba(60,170,255,.55)');gr.addColorStop(1,'rgba(120,210,255,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill()}
+    g.fillStyle='#fff';g.strokeStyle='#0e1824';g.lineWidth=3;g.beginPath();g.arc(cx,cy,6,0,7);g.stroke();g.fill();
+    g.font='600 13px '+getComputedStyle(document.body).fontFamily;g.fillStyle='rgba(255,255,255,.7)';g.fillText('Simuloitu tutkakuva · esikatselu',12,h-12)}
+}
+const radarSims=new Set();
+async function radarInit(pane,loc){
+  const box=$('.map',pane),bar=$('.rbar',pane);const key=loc.lat+','+loc.lon+(DEMO?'d':'');if(box.dataset.key===key)return;box.dataset.key=key;
+  const old=pane._radar;if(old){clearInterval(old.iv);old.sim&&radarSims.delete(old.sim);old.map&&old.map.remove()}box.innerHTML='';pane._radar=null;
+  if(DEMO||!window.L){
+    const sim=new RadarSim(box,demoData(loc).scen===SCEN.rainy);radarSims.add(sim);pane._radar={sim};
+    bar.innerHTML=`<span class="rt">Esikatselu</span><span>Oikea tutkakuva (RainViewer) näkyy, kun sovellus ajetaan omassa selaimessa.</span>`;return}
+  const map=L.map(box,{zoomControl:false,attributionControl:true,scrollWheelZoom:false,dragging:true}).setView([loc.lat,loc.lon],7);
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${S.skin==='paperi'?'light_all':'dark_all'}/{z}/{x}/{y}{r}.png`,{subdomains:'abcd',maxZoom:10,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+  L.circleMarker([loc.lat,loc.lon],{radius:6,color:'#fff',weight:2.5,fillColor:'#ff5a7a',fillOpacity:1}).addTo(map);
+  const R={map,iv:0,i:0,play:true};pane._radar=R;
+  try{
+    const j=await getJSON('https://api.rainviewer.com/public/weather-maps.json',3e5);
+    const fr=[...(j.radar.past||[]),...(j.radar.nowcast||[])];
+    R.layers=fr.map(f=>L.tileLayer(`${j.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`,{opacity:0,maxNativeZoom:7,maxZoom:10,zIndex:5,attribution:'<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">Weather data by RainViewer</a>'}).addTo(map));
+    R.frames=fr;R.i=fr.length-1;
+    const show=i=>{R.layers.forEach((l,k)=>l.setOpacity(k===i?.75:0));const lbl=$('.rt',bar);if(lbl)lbl.textContent='klo '+hm(new Date(fr[i].time*1000),loc.tz)};
+    bar.innerHTML=`<button class="tbtn sm" data-act="rplay" aria-label="Toista tai pysäytä tutka-animaatio"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button><span class="rt"></span><span>Kahden tunnin tutkahistoria</span>`;
+    show(R.i);let hold=0;
+    R.tick=()=>{if(!R.play)return;if(R.i===fr.length-1&&hold++<2)return;hold=0;R.i=(R.i+1)%fr.length;show(R.i)};
+    R.iv=setInterval(R.tick,650);
+  }catch(e){bar.innerHTML='<span>Tutkakuvaa ei saatu ladattua. Yritä myöhemmin uudelleen.</span>'}
+}
+
+/* ---------- paneelit ---------- */
+const skies=new Set();
+function makePane(i){
+  const p=document.createElement('section');p.className='pane';p.dataset.i=i;
+  p.innerHTML=`<canvas class="sky" aria-hidden="true"></canvas><div class="scrollp"><div class="inner">
+    <div class="s-head"></div><div class="glass hero s-hero"><div class="loading">Haetaan säätietoja…</div></div>
+    <div class="glass s-nc" hidden></div><div class="phen s-phen"></div><div class="glass s-hourly" hidden></div><div class="glass s-days" hidden></div>
+    <div class="glass"><h3>Sadetutka</h3><div class="map"></div><div class="rbar"></div></div>
+    <div class="src">Ennusteet: <a href="https://www.yr.no/" target="_blank" rel="noopener">MET Norway / yr.no</a> (CC BY 4.0) · Tutka: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · Avaruussää: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a></div>
+  </div></div>`;
+  p._sky=new Sky($('.sky',p));skies.add(p._sky);
+  p._gro=new ResizeObserver(()=>dayGraph(p));p._gro.observe($('.s-hero',p));return p;
+}
+async function renderPane(p){
+  const i=+p.dataset.i,loc=S.locs[i]||HKI;
+  $('.s-head',p).innerHTML=headHTML(loc);
+  let data;
+  try{data=await loadAll(loc)}
+  catch(e){
+    if(e.net){if(!DEMO){DEMO=true;banner();return renderAll()}return renderPane(p)}
+    $('.s-hero',p).innerHTML=`<div class="err">Säätietojen haku epäonnistui (${esc(e.message)}). <br><button class="chip" data-act="refresh">Yritä uudelleen</button></div>`;return}
+  const A=analyze(data,loc),au=aurora(data,A,loc),R=radarText(data,A,loc);
+  p._A=A;p._au=au;p._loc=loc;
+  $('.s-head',p).innerHTML=headHTML(loc);
+  $('.s-hero',p).innerHTML=heroHTML(A,loc);
+  const nc=$('.s-nc',p);nc.innerHTML=radarTextHTML(R);nc.hidden=false;
+  $('.s-phen',p).innerHTML=phenHTML(phenomena(A,loc),au);
+  const h=$('.s-hourly',p);h.innerHTML=hourlyHTML(A,loc);h.hidden=!A.hourly.length;
+  const d=$('.s-days',p);d.innerHTML=daysHTML(A,loc);d.hidden=!A.days.length;
+  dayGraph(p);applySky(p);radarInit(p,loc);
+}
+function applySky(p){if(!p._A)return;const st=skyState(p._A,p._loc,p._au),[a,b]=skyColors(st);p.style.background=`linear-gradient(180deg,${a},${b})`;p._sky.set(st);
+  p.style.textShadow=S.skin==='paperi'?'none':''}
+function renderAll(){$$('.pane').forEach(renderPane)}
+function layout(){
+  const host=$('#panes'),n=S.layout==='split'?2:1;host.dataset.layout=S.layout;host.dataset.orient=S.orient;
+  while(host.children.length>n){const p=host.lastElementChild;skies.delete(p._sky);p._sky.ro.disconnect();p._gro&&p._gro.disconnect();if(p._radar){clearInterval(p._radar.iv);p._radar.sim&&radarSims.delete(p._radar.sim);p._radar.map&&p._radar.map.remove()}p.remove()}
+  while(host.children.length<n){const p=makePane(host.children.length);host.append(p);renderPane(p)}
+  $$('[data-layout]').forEach(b=>b.dataset.layout&&b.tagName==='BUTTON'&&b.setAttribute('aria-pressed',b.dataset.layout===S.layout));
+  $$('[data-orient]').forEach(b=>b.tagName==='BUTTON'&&b.setAttribute('aria-pressed',b.dataset.orient===S.orient));
+  $('#orientSeg').hidden=S.layout!=='split';
+  setTimeout(()=>$$('.pane').forEach(p=>p._radar&&p._radar.map&&p._radar.map.invalidateSize()),80);
+}
+function banner(){const b=$('#banner');$('p',b).textContent='Esikatselu simuloidulla säädatalla: tämä ikkuna estää yhteydet sääpalveluihin. Avaa sovellus omassa selaimessa tai palvelimella, niin ennusteet haetaan suoraan yr.no:sta.';b.hidden=false}
+
+/* ---------- dialogit ---------- */
+const modal=$('#modal'),sheet=$('.sheet',modal);let onClose=null;
+function openModal(html,mount){sheet.innerHTML='<div class="shin">'+html+'</div>';const el=sheet.firstChild;modal.hidden=false;mount&&mount(el);const f=$('input,button',el);f&&f.focus()}
+function closeModal(){const f=onClose;onClose=null;f&&f();modal.hidden=true;sheet.innerHTML=''}
+modal.addEventListener('click',e=>{if(e.target===modal||e.target.closest('[data-close]'))closeModal()});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal()});
+const CITIES=[['Helsinki','Uusimaa',60.1699,24.9384],['Espoo','Uusimaa',60.2055,24.6559],['Vantaa','Uusimaa',60.2934,25.0378],['Tampere','Pirkanmaa',61.4978,23.761],['Turku','Varsinais-Suomi',60.4518,22.2666],['Oulu','Pohjois-Pohjanmaa',65.0121,25.4651],['Jyväskylä','Keski-Suomi',62.2426,25.7473],['Kuopio','Pohjois-Savo',62.8924,27.677],['Lahti','Päijät-Häme',60.9827,25.6612],['Pori','Satakunta',61.4851,21.7974],['Joensuu','Pohjois-Karjala',62.601,29.7636],['Lappeenranta','Etelä-Karjala',61.0587,28.1887],['Vaasa','Pohjanmaa',63.096,21.6158],['Seinäjoki','Etelä-Pohjanmaa',62.7903,22.8403],['Kajaani','Kainuu',64.2245,27.7334],['Rovaniemi','Lappi',66.5039,25.7294],['Kemi','Lappi',65.7364,24.5637],['Sodankylä','Lappi',67.4167,26.5833],['Kittilä (Levi)','Lappi',67.8,24.8],['Inari','Lappi',68.9058,27.0281],['Utsjoki','Lappi',69.9078,27.0283],['Kilpisjärvi','Lappi',69.0478,20.7911],['Maarianhamina','Ahvenanmaa',60.0973,19.9348],['Hanko','Uusimaa',59.8236,22.9681],['Savonlinna','Etelä-Savo',61.8687,28.8786],['Kuusamo','Pohjois-Pohjanmaa',65.9667,29.1833],['Tukholma','Ruotsi',59.3293,18.0686],['Tallinna','Viro',59.437,24.7536],['Oslo','Norja',59.9139,10.7522],['Tromssa','Norja',69.6492,18.9553]]
+  .map(([n,r,la,lo])=>({name:n,region:r+(r==='Ruotsi'||r==='Viro'||r==='Norja'?'':', Suomi'),lat:la,lon:lo,tz:r==='Ruotsi'?'Europe/Stockholm':r==='Norja'?'Europe/Oslo':r==='Viro'?'Europe/Tallinn':r==='Ahvenanmaa'?'Europe/Mariehamn':'Europe/Helsinki'}));
+const isFav=l=>S.favs.some(f=>sameLoc(f,l));
+function toggleFav(l){const i=S.favs.findIndex(f=>sameLoc(f,l));if(i>=0)S.favs.splice(i,1);else{if(S.favs.length>=5)return 'Suosikkeja voi olla enintään viisi.';S.favs.push(l)}save();$$('.pane').forEach(p=>{const L0=S.locs[+p.dataset.i];$('.s-head',p).innerHTML=headHTML(L0)})}
+function rowsHTML(list){return list.map((l,j)=>`<div class="row"><button data-pick="${j}"><b>${esc(l.name)}</b><small>${esc(l.region||'')}</small></button><button class="star" data-star="${j}" aria-pressed="${isFav(l)}" aria-label="${isFav(l)?'Poista suosikeista':'Lisää suosikkeihin'}">${isFav(l)?'★':'☆'}</button></div>`).join('')}
+function openLoc(pi){
+  let list=S.favs.slice(),tm=0;
+  openModal(`<h2>Valitse paikkakunta <button class="x" data-close aria-label="Sulje">×</button></h2>
+    <input class="inp" id="q" type="search" placeholder="Hae kaupunkia tai kylää" autocomplete="off" aria-label="Hae paikkakuntaa">
+    <button class="wide" id="geo">Käytä nykyistä sijaintiani</button><div class="msg" id="lm"></div>
+    <h4 id="lh">Suosikit (${S.favs.length}/5)</h4><div class="list" id="res">${rowsHTML(list)}</div>`,el=>{
+    const res=$('#res',el),lm=$('#lm',el),lh=$('#lh',el);
+    const draw=()=>{res.innerHTML=rowsHTML(list)||'<div class="msg">Ei tuloksia.</div>'};
+    $('#q',el).addEventListener('input',e=>{const q=e.target.value.trim();clearTimeout(tm);
+      if(!q){list=S.favs.slice();lh.textContent=`Suosikit (${S.favs.length}/5)`;return draw()}
+      lh.textContent='Hakutulokset';const ql=q.toLocaleLowerCase('fi');
+      list=CITIES.filter(c=>c.name.toLocaleLowerCase('fi').startsWith(ql));draw();
+      if(q.length<2||DEMO)return;
+      tm=setTimeout(async()=>{try{const j=await getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=fi&format=json`,864e5);
+        const more=(j.results||[]).map(r=>({name:r.name,region:[r.admin1,r.country].filter(Boolean).join(', '),lat:r.latitude,lon:r.longitude,tz:r.timezone||'Europe/Helsinki'}));
+        list=[...list,...more.filter(m=>!list.some(x=>sameLoc(x,m)))];draw()}catch(e){}},320)});
+    res.addEventListener('click',e=>{const s=e.target.closest('[data-star]');if(s){const m=toggleFav(list[+s.dataset.star]);lm.textContent=m||'';draw();return}
+      const b=e.target.closest('[data-pick]');if(b){choose(pi,list[+b.dataset.pick])}});
+    $('#geo',el).addEventListener('click',()=>{if(!navigator.geolocation){lm.textContent='Selain ei tue sijaintia.';return}lm.textContent='Haetaan sijaintia…';
+      navigator.geolocation.getCurrentPosition(pos=>choose(pi,{name:'Oma sijainti',region:`${f1(pos.coords.latitude)}° N, ${f1(pos.coords.longitude)}° E`,lat:pos.coords.latitude,lon:pos.coords.longitude,tz:Intl.DateTimeFormat().resolvedOptions().timeZone}),
+        ()=>{lm.textContent='Sijaintia ei saatu. Salli sijainti selaimen asetuksista tai hae paikkakuntaa nimellä.'},{timeout:9000,maximumAge:6e5})});
+  });
+}
+function choose(pi,l){S.locs[pi]={...l};save();closeModal();const p=$(`.pane[data-i="${pi}"]`);if(p){$('.s-hero',p).innerHTML='<div class="loading">Haetaan säätietoja…</div>';renderPane(p)}}
+const SKINS=[['lasi','Lasi','Huurteiset kortit elävän taivaan edessä','linear-gradient(160deg,#2a7fdc,#8cc8f5)'],['paperi','Paperi','Vaalea ja hillitty, tumma teksti','linear-gradient(160deg,#dfe6ee,#faf8f3)'],['yo','Yö','Musta OLED-pohja, säästää akkua','linear-gradient(160deg,#05070b,#1a2233)'],['revontuli','Revontuli','Syvä turkoosi ja revontulen vihreä','linear-gradient(160deg,#05202a,#0c3a3c 60%,#2a8f6a)']];
+const PREV=[['auto','Todellinen sää'],['clear','Aurinkoinen'],['partly','Puolipilvinen'],['cloudy','Pilvinen'],['rain','Sade'],['heavy','Rankkasade'],['storm','Ukkonen'],['snow','Lumisade'],['sleet','Räntä'],['fog','Sumu'],['sunset','Auringonlasku'],['night','Kirkas yö ja revontulet']];
+function openSettings(){
+  openModal(`<h2>Asetukset <button class="x" data-close aria-label="Sulje">×</button></h2>
+   <h4>Teema</h4><div class="skins">${SKINS.map(([k,n,d,bg])=>`<button class="skin" data-skin="${k}" aria-pressed="${S.skin===k}"><i style="background:${bg}"></i><span>${n}</span><small>${d}</small></button>`).join('')}</div>
+   <h4>Animaatiot</h4><div class="seg" role="group" aria-label="Animaatiot">${[['full','Täysi'],['lite','Kevyt'],['off','Pois']].map(([k,n])=>`<button data-anim="${k}" aria-pressed="${S.anim===k}">${n}</button>`).join('')}</div>
+   <p class="note">Kevyt-tila puolittaa partikkelit ja ruudunpäivityksen, mikä säästää akkua. Animaatiot pysähtyvät aina, kun välilehti ei ole näkyvissä.</p>
+   <h4>Säätehosteen esikatselu</h4><select class="sel" id="pv" aria-label="Säätehosteen esikatselu">${PREV.map(([k,n])=>`<option value="${k}" ${S.preview===k?'selected':''}>${n}</option>`).join('')}</select>
+   <p class="note">Näytä koko ruudun taustatehoste valitulla säätilalla. Ennusteen tiedot eivät muutu.</p>
+   <h4>Suosikit (${S.favs.length}/5)</h4><div class="list">${S.favs.map((f,j)=>`<div class="row"><button data-gofav="${j}"><b>${esc(f.name)}</b><small>${esc(f.region||'')}</small></button><button class="star" data-unfav="${j}" aria-pressed="true" aria-label="Poista ${esc(f.name)} suosikeista">★</button></div>`).join('')||'<div class="msg">Lisää suosikkeja paikkakuntahaun tähdellä.</div>'}</div>
+   <h4>Datayhteys</h4><input class="inp" id="px" placeholder="https://saa-proxy.oma-tili.workers.dev" value="${esc(S.proxy)}" aria-label="Välityspalvelimen osoite">
+   <p class="note">Valinnainen välityspalvelin (Cloudflare Worker), joka lisää yr.no:n vaatiman User-Agent-tunnisteen ja välimuistin. Tyhjänä haut tehdään suoraan selaimesta.${DEMO?' <b>Nyt käytössä esikatseludata.</b>':''}</p>`,el=>{
+    el.addEventListener('click',e=>{
+      const sk=e.target.closest('button.skin');if(sk){S.skin=sk.dataset.skin;save();applyGlobal();$$('[data-skin]',el).forEach(b=>b.setAttribute('aria-pressed',b.dataset.skin===S.skin));$$('.pane').forEach(p=>{applySky(p);const m=$('.map',p);if(m&&!DEMO){m.dataset.key=''}radarInit(p,S.locs[+p.dataset.i])})}
+      const an=e.target.closest('button[data-anim]');if(an){S.anim=an.dataset.anim;save();applyGlobal();$$('[data-anim]',el).forEach(b=>b.setAttribute('aria-pressed',b.dataset.anim===S.anim));$$('.pane').forEach(applySky)}
+      const uf=e.target.closest('[data-unfav]');if(uf){S.favs.splice(+uf.dataset.unfav,1);save();openSettings();$$('.pane').forEach(p=>$('.s-head',p).innerHTML=headHTML(S.locs[+p.dataset.i]))}
+      const gf=e.target.closest('[data-gofav]');if(gf)choose(0,S.favs[+gf.dataset.gofav]);
+    });
+    $('#pv',el).addEventListener('change',e=>{S.preview=e.target.value;save();$$('.pane').forEach(applySky)});
+    onClose=()=>{const v=($('#px',el)?.value||'').trim();if(v!==S.proxy){S.proxy=v;save();cache.clear();DEMO=false;$('#banner').hidden=true;$$('.map').forEach(m=>m.dataset.key='');renderAll()}};
+  });
+}
+function applyGlobal(){document.documentElement.dataset.skin=S.skin;document.documentElement.dataset.anim=S.anim}
+
+/* ---------- tapahtumat ---------- */
+$('.top').addEventListener('click',e=>{
+  const l=e.target.closest('button[data-layout]');if(l){S.layout=l.dataset.layout;save();layout()}
+  const o=e.target.closest('button[data-orient]');if(o){S.orient=o.dataset.orient;save();layout()}
+  if(e.target.closest('#setBtn'))openSettings();
+});
+$('#panes').addEventListener('click',e=>{
+  const p=e.target.closest('.pane');if(!p)return;const i=+p.dataset.i;
+  const a=e.target.closest('[data-act]');
+  if(a){const act=a.dataset.act;
+    if(act==='loc')openLoc(i);
+    if(act==='refresh'){cache.clear();renderPane(p)}
+    if(act==='rplay'&&p._radar){p._radar.play=!p._radar.play;a.innerHTML=p._radar.play?'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>'}}
+  const f=e.target.closest('[data-fav]');if(f)choose(i,S.favs[+f.dataset.fav]);
+});
+$('[data-close-banner]').addEventListener('click',()=>$('#banner').hidden=true);
+
+/* ---------- silmukka ---------- */
+let last=0;
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;
+  if(S.anim!=='off'&&!document.hidden){for(const s of skies)s.draw(dt);for(const r of radarSims)r.draw(dt)}
+  requestAnimationFrame(loop)}
+setInterval(()=>{$$('.pane').forEach(p=>{const c=$('.clk',p),l=S.locs[+p.dataset.i];if(c&&l)c.textContent=hm(new Date(),l.tz);applySky(p);dayGraph(p)})},6e4);
+setInterval(()=>{if(!document.hidden)renderAll()},10*6e4);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)$$('.pane').forEach(applySky)});
+
+applyGlobal();layout();
+if(S.anim==='off')setTimeout(()=>radarSims.forEach(r=>r.draw(0)),300);
+requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
