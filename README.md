@@ -4,7 +4,7 @@ Yksi HTML-tiedosto (`public/index.html`), ei käännösvaihetta. Valinnainen vä
 
 ## Julkaisu
 
-- Tuotanto: **https://saaennuste-4166b.web.app** (Firebase Hosting, projekti `saaennuste-4166b`).
+- Tuotanto: **https://saaennuste.web.app** (Firebase Hosting, sivusto `saaennuste` projektissa `saaennuste-4166b`).
 - Jokainen muutos `main`-haaraan julkaistaan automaattisesti (`.github/workflows/firebase-hosting-merge.yml`).
 - Jokaisesta pull requestista syntyy oma esikatseluosoite, joka näkyy PR:n kommentissa (`firebase-hosting-pull-request.yml`).
 - Julkaisu tarvitsee GitHubin salaisuuden `FIREBASE_SERVICE_ACCOUNT` (Firebase-projektin palvelutilin JSON-avain). Avaintiedostoa ei koskaan tallenneta repoon.
